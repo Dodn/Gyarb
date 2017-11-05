@@ -344,12 +344,6 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
                         }
                         values.add(row);
                     }
-                    Arrays.asList(
-                            Arrays.asList(
-                                    // Cell values ...
-                            )
-                            // Additional rows ...
-                    );
                     ValueRange body = new ValueRange()
                             .setValues(values);
                     UpdateValuesResponse result =
