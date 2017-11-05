@@ -39,6 +39,7 @@ import com.google.api.services.sheets.v4.SheetsScopes;
 import com.google.api.services.sheets.v4.model.*;
 
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -71,9 +72,18 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
 
     };
 
-    String Brain1ID = "1-6UIogljURV6TLVcx5lCzqa-s2ce04lK1ypcdFj6h1Q";
+    Brain[] GeneticPredict1 = new Brain[GenePred1ID.length];
+    static String[] GenePred1ID = {
+            "1-6UIogljURV6TLVcx5lCzqa-s2ce04lK1ypcdFj6h1Q",
+            "1JcP1ChW4q3VUy2ir86UqrD3bUPQT0DQ7V5gzqftbp-U",
+
+    };
+    int[] GenePred1Dimens = {7, 3, 3, 1};
+
+    double[][][] defaultWeights; {defaultWeights = new double[][][]{{{0}}};}
     String exampleRange = "Sheet1!A1:G";
-    String[] Letter = {"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"};
+
+    static String[] Letter = {"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"};
     private TextView mOutputText;
     private Button mCallApiButton;
     ProgressDialog mProgress;
@@ -115,6 +125,9 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
                 getApplicationContext(), Arrays.asList(SCOPES))
                 .setBackOff(new ExponentialBackOff());
 
+        for (int i = 0; i < GeneticPredict1.length; i++) {
+            GeneticPredict1[i] = new Brain(GenePred1ID[i], GenePred1Dimens, defaultWeights);
+        }
     }
 
     private void getResultsFromApi() {
@@ -125,9 +138,14 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         } else if (! isDeviceOnline()) {
             mOutputText.setText("No network connection available.");
         } else {
-            int[] out = {3, 3, 1};
-            int[] in = {7, 3, 3};
-            new GetBrain(mCredential, Brain1ID,out ,in).execute();
+            new GetBrains(mCredential, GeneticPredict1, new GetBrainCallback() {
+                @Override
+                public void onResult(double[][][][] brain) {
+                    for (int i = 0; i < GeneticPredict1.length; i++) {
+                        GeneticPredict1[i].weights = brain[i];
+                    }
+                }
+            }).execute();
         }
     }
 
@@ -244,6 +262,24 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         dialog.show();
     }
 
+    public static double[] Think(double[][][] brain, double[] data){
+        double[][] inputs = new double[data.length][1];
+        for (int i = 0; i < data.length; i++) {
+            inputs[i][0] = data[i];
+        }
+
+        for (int i = 0; i < brain.length; i++) {
+            inputs = Activation(mult(brain[i], inputs));
+        }
+
+        double[] results = new double[inputs.length];
+        for (int i = 0; i < inputs.length; i++) {
+            results[i] = inputs[i][0];
+        }
+
+        return results;
+    }
+
     public static double[][] mult(double[][] a, double[][] b) {
         int m1 = a.length;
         int n1 = a[0].length;
@@ -258,16 +294,85 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         return c;
     }
 
+    public static double[][] Activation(double[][] input){
 
+        double[][] result = new double[input.length][input[0].length];
+        for (int i = 0; i < input.length; i++) {
+            for (int j = 0; j < input[i].length; j++) {
+                result[i][j] = LeakyReLU(input[i][j]);
+            }
+        }
+        return result;
+    }
 
-    private class GetBrain extends AsyncTask<Void, Void, List<double[][]>> {
+    public static double ReLU(double input){
+        if (input > 0) {
+            return input;
+        } else {
+            return 0;
+        }
+    }
+
+    public static double LeakyReLU(double input){
+        if (input > 0) {
+            return input;
+        } else {
+            return (input * 0.1);
+        }
+    }
+
+    public void PostBrains(GoogleAccountCredential credential, Brain[] brains){
+        HttpTransport transport = AndroidHttp.newCompatibleTransport();
+        JsonFactory jsonFactory = JacksonFactory.getDefaultInstance();
+        com.google.api.services.sheets.v4.Sheets mService = new com.google.api.services.sheets.v4.Sheets.Builder(
+                transport, jsonFactory, credential)
+                .setApplicationName("Google Sheets API Android Quickstart")
+                .build();
+
+        try {
+            for (int i = 0; i < brains.length; i++) {
+
+                for (int j = 0; j < brains[i].weights.length; j++) {
+
+                    String range = "Layer" + (i+1) + "!A1:" + Letter[brains[i].dimens[i] - 1] + brains[i].dimens[i + 1];
+
+                    List<List<Object>> values = new ArrayList<>();
+                    for (int k = 0; k < brains[i].weights[j].length; k++) {
+                        List<Object> row = new ArrayList<>();
+                        for (int l = 0; l < (brains[i].weights[j][k].length); l++) {
+                            row.add((brains[i].weights[j][k][l]));
+                        }
+                        values.add(row);
+                    }
+                    Arrays.asList(
+                            Arrays.asList(
+                                    // Cell values ...
+                            )
+                            // Additional rows ...
+                    );
+                    ValueRange body = new ValueRange()
+                            .setValues(values);
+                    UpdateValuesResponse result =
+                            mService.spreadsheets().values().update(brains[i].id, range, body).execute();
+
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private class GetBrains extends AsyncTask<Void, Void, double[][][][]> {
+        GetBrainCallback callback;
+
         private com.google.api.services.sheets.v4.Sheets mService = null;
         private Exception mLastError = null;
-        private String spreadsheetId;
-        int[] outDimens;
-        int[] inDimens;
+        private String spreadsheetIds[];
+        int[] dimens;
 
-        GetBrain(GoogleAccountCredential credential, String sheetID, int[] out, int[] in) {
+        GetBrains(GoogleAccountCredential credential, Brain[] brains, GetBrainCallback callback) {
+            this.callback = callback;
+
             HttpTransport transport = AndroidHttp.newCompatibleTransport();
             JsonFactory jsonFactory = JacksonFactory.getDefaultInstance();
             mService = new com.google.api.services.sheets.v4.Sheets.Builder(
@@ -275,13 +380,15 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
                     .setApplicationName("Google Sheets API Android Quickstart")
                     .build();
 
-            spreadsheetId = sheetID;
-            outDimens = out;
-            inDimens = in;
+            spreadsheetIds = new String[brains.length];
+            for (int i = 0; i < brains.length; i++) {
+                spreadsheetIds[i] = brains[i].id;
+            }
+            dimens = brains[0].dimens;
         }
 
         @Override
-        protected List<double[][]> doInBackground(Void... params) {
+        protected double[][][][] doInBackground(Void... params) {
             try {
                 return getDataFromApi();
             } catch (Exception e) {
@@ -291,23 +398,29 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
             }
         }
 
-        private List<double[][]> getDataFromApi() throws IOException {
-            List<double[][]> results = new ArrayList<double[][]>();
-            for (int i = 0; i < outDimens.length; i++) {
-                String range = "Layer" + (i+1) + "!A1:" + Letter[inDimens[i] - 1] + outDimens[i];
-                ValueRange response = this.mService.spreadsheets().values()
-                        .get(spreadsheetId, range)
-                        .execute();
-                List<List<Object>> values = response.getValues();
-                double[][] layer = new double[outDimens[i]][inDimens[i]];
-                if (values != null) {
-                    for (int j = 0; j < outDimens[i]; j++) {
-                        for (int k = 0; k < inDimens[i]; k++){
-                            layer[j][k] = Double.parseDouble(values.get(j).get(k).toString());
+        private double[][][][] getDataFromApi() throws IOException {
+
+            double[][][][] results = new double[spreadsheetIds.length][dimens.length - 1][][];
+
+            for (int net = 0; net < spreadsheetIds.length; net++) {
+                for (int i = 0; i < dimens.length - 1; i++) {
+
+                    String range = "Layer" + (i+1) + "!A1:" + Letter[dimens[i] - 1] + dimens[i + 1];
+                    ValueRange response = this.mService.spreadsheets().values()
+                            .get(spreadsheetIds[net], range)
+                            .execute();
+                    List<List<Object>> values = response.getValues();
+                    double[][] layer = new double[dimens[i + 1]][dimens[i]];
+                    if (values != null) {
+                        for (int j = 0; j < dimens[i + 1]; j++) {
+                            for (int k = 0; k < dimens[i]; k++){
+                                layer[j][k] = Double.parseDouble(values.get(j).get(k).toString());
+                            }
                         }
                     }
+                    results[net][i] = layer;
                 }
-                results.add(layer);
+
             }
             return results;
         }
@@ -319,11 +432,12 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         }
 
         @Override
-        protected void onPostExecute(List<double[][]> output) {
+        protected void onPostExecute(double[][][][] output) {
             mProgress.hide();
-            if (output == null || output.size() == 0) {
+            if (output == null || output.length == 0) {
                 mOutputText.setText("No results returned.");
             } else {
+                callback.onResult(output);
                 mOutputText.setText(TextUtils.join("\n", output));
             }
         }
