@@ -89,14 +89,17 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
     ProgressDialog mProgress;
     GoogleAccountCredential mCredential;
 
+    boolean postORget = false;
+
     static final int REQUEST_ACCOUNT_PICKER = 1000;
     static final int REQUEST_AUTHORIZATION = 1001;
     static final int REQUEST_GOOGLE_PLAY_SERVICES = 1002;
     static final int REQUEST_PERMISSION_GET_ACCOUNTS = 1003;
 
-    private static final String BUTTON_TEXT = "Call Google Sheets API";
+    private static final String GET_BUTTON_TEXT = "Download Brains";
+    private static final String POST_BUTTON_TEXT = "Post Brains";
     private static final String PREF_ACCOUNT_NAME = "accountName";
-    private static final String[] SCOPES = { SheetsScopes.SPREADSHEETS_READONLY };
+    private static final String[] SCOPES = { SheetsScopes.SPREADSHEETS};
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -109,11 +112,25 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         mOutputText = findViewById(R.id.textView1);
         mProgress = new ProgressDialog(this);
 
-        mCallApiButton = findViewById(R.id.Button);
-        mCallApiButton.setText(BUTTON_TEXT);
+        final Button PostButton = findViewById(R.id.ButtonPost);
+        PostButton.setText(POST_BUTTON_TEXT);
+        PostButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                postORget = true;
+                PostButton.setEnabled(false);
+                mOutputText.setText("");
+                getResultsFromApi();
+                PostButton.setEnabled(true);
+            }
+        });
+
+        mCallApiButton = findViewById(R.id.ButtonGet);
+        mCallApiButton.setText(GET_BUTTON_TEXT);
         mCallApiButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                postORget = false;
                 mCallApiButton.setEnabled(false);
                 mOutputText.setText("");
                 getResultsFromApi();
@@ -137,6 +154,8 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
             chooseAccount();
         } else if (! isDeviceOnline()) {
             mOutputText.setText("No network connection available.");
+        } else if (postORget){
+            new PostBrains(mCredential, GeneticPredict1).execute();
         } else {
             new GetBrains(mCredential, GeneticPredict1, new GetBrainCallback() {
                 @Override
@@ -268,8 +287,8 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
             inputs[i][0] = data[i];
         }
 
-        for (int i = 0; i < brain.length; i++) {
-            inputs = Activation(mult(brain[i], inputs));
+        for (double[][] weightLayer : brain) {
+            inputs = Activation(mult(weightLayer, inputs));
         }
 
         double[] results = new double[inputs.length];
@@ -321,39 +340,70 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         }
     }
 
-    public void PostBrains(GoogleAccountCredential credential, Brain[] brains){
-        HttpTransport transport = AndroidHttp.newCompatibleTransport();
-        JsonFactory jsonFactory = JacksonFactory.getDefaultInstance();
-        com.google.api.services.sheets.v4.Sheets mService = new com.google.api.services.sheets.v4.Sheets.Builder(
-                transport, jsonFactory, credential)
-                .setApplicationName("Google Sheets API Android Quickstart")
-                .build();
+    private class PostBrains extends AsyncTask<Void, Void, String>{
 
-        try {
-            for (int i = 0; i < brains.length; i++) {
+        private com.google.api.services.sheets.v4.Sheets mService = null;
+        Brain[] brains;
 
-                for (int j = 0; j < brains[i].weights.length; j++) {
+        PostBrains(GoogleAccountCredential credential, Brain[] brains){
+            HttpTransport transport = AndroidHttp.newCompatibleTransport();
+            JsonFactory jsonFactory = JacksonFactory.getDefaultInstance();
+            mService = new com.google.api.services.sheets.v4.Sheets.Builder(
+                    transport, jsonFactory, credential)
+                    .setApplicationName("Google Sheets API Android Quickstart")
+                    .build();
 
-                    String range = "Layer" + (i+1) + "!A1:" + Letter[brains[i].dimens[i] - 1] + brains[i].dimens[i + 1];
-
-                    List<List<Object>> values = new ArrayList<>();
-                    for (int k = 0; k < brains[i].weights[j].length; k++) {
-                        List<Object> row = new ArrayList<>();
-                        for (int l = 0; l < (brains[i].weights[j][k].length); l++) {
-                            row.add((brains[i].weights[j][k][l]));
-                        }
-                        values.add(row);
-                    }
-                    ValueRange body = new ValueRange()
-                            .setValues(values);
-                    UpdateValuesResponse result =
-                            mService.spreadsheets().values().update(brains[i].id, range, body).execute();
-
-                }
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
+            this.brains = brains;
         }
+
+        @Override
+        protected void onPreExecute() {
+            mOutputText.setText("");
+            mProgress.show();
+        }
+
+        @Override
+        protected String doInBackground(Void...params) {
+
+            try {
+                for (int i = 0; i < brains.length; i++) {
+
+                    for (int j = 0; j < brains[i].weights.length; j++) {
+
+                        String range = "Layer" + (i+1) + "!A1:" + Letter[brains[i].dimens[j] - 1] + brains[i].dimens[j + 1];
+
+                        List<List<Object>> values = new ArrayList<>();
+                        for (int k = 0; k < brains[i].weights[j].length; k++) {
+
+                            List<Object> row = new ArrayList<>();
+                            for (int l = 0; l < (brains[i].weights[j][k].length); l++) {
+                                row.add((brains[i].weights[j][k][l]));
+                            }
+                            values.add(row);
+                        }
+
+                        ValueRange body = new ValueRange()
+                                .setValues(values);
+                        UpdateValuesResponse result =
+                                mService.spreadsheets().values().update(brains[i].id, range, body)
+                                        .setValueInputOption("USER_ENTERED")
+                                        .execute();
+
+                    }
+                }
+                return "Post Successful";
+            } catch (Exception e) {
+                e.printStackTrace();
+                return "Post Failed";
+            }
+        }
+
+        @Override
+        protected void onPostExecute(String response) {
+            mProgress.hide();
+            mOutputText.setText(response);
+        }
+
     }
 
     private class GetBrains extends AsyncTask<Void, Void, double[][][][]> {
@@ -432,7 +482,8 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
                 mOutputText.setText("No results returned.");
             } else {
                 callback.onResult(output);
-                mOutputText.setText(TextUtils.join("\n", output));
+                //mOutputText.setText(TextUtils.join("\n", output));
+                mOutputText.setText("Download Successful");
             }
         }
 

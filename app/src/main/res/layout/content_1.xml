@@ -10,8 +10,13 @@
         android:text="Home" />
 
     <Button
-        android:id="@+id/Button"
+        android:id="@+id/ButtonGet"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"/>
+
+    <Button
+        android:id="@+id/ButtonPost"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
 
 </LinearLayout>
