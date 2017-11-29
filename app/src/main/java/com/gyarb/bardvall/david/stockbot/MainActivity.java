@@ -76,7 +76,20 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
     static String[] GenePred1ID = {
             "1-6UIogljURV6TLVcx5lCzqa-s2ce04lK1ypcdFj6h1Q",
             "1JcP1ChW4q3VUy2ir86UqrD3bUPQT0DQ7V5gzqftbp-U",
-
+            "1DGFDNP0FycQnnZhJWkap9BDmX_2IVcP_qcOK7aWt8Mo",
+            "1L6KU_dP8qE-Loxmt3WXzqe-jrXrs7q2CBiV5rXtDhZo",
+            "1vx2gpgSlTBr7cwjYvQ7Z1c9MrK58acZRuZV7K_bhWJ8",
+            "104FNcK0uW2441avkxGAM4jnBdPqoAqDLTHHTR2Y8G5w",
+            "1-3rc1QnbIv4dc-X5fCntFgzvks6d0yFH63OwkHfkDQ8",
+            "1SKEnNrRgiSWVhpU5JweCsW5P814aC-1fXD_5EcfCMNU",
+            "1eP37Jvn3FjeLMzvyxjjG9yhjuwqq9b1Sp5sHwp64lYU",
+            "1vbOamjAFaNx9hwP4u0Gtyln6oyulA62Uh4-gmaQlpaI",
+            "1zLrWK-JnJWHExkubj7J2fSr2LziZDUu_FW063RRkc4E",
+            "1bSTEQevr_wmf9tNWT6FZX9H7ZoJzFkLk8w6gLhvr-is",
+            "1H_hHxhMlj_j5WHyi-u8Lkf02T5WF4qhVolqBPEzMBwE",
+            "1KQoRAe1q8i3uWjHKE-5lUaZL-iOtM-JkhKaVZzYm-CE",
+            "1t5BWe3NGPYZknwvyYt06GpXa4h-VBvSkyVPqeg46-A4",
+            "1dTphuOKnbph3RRW8ofg44_EEzTRhNopmya6juWLsYYI"
     };
     int[] GenePred1Dimens = {7, 3, 3, 1};
 
@@ -370,7 +383,7 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
 
                     for (int j = 0; j < brains[i].weights.length; j++) {
 
-                        String range = "Layer" + (i+1) + "!A1:" + Letter[brains[i].dimens[j] - 1] + brains[i].dimens[j + 1];
+                        String range = "Layer" + (j+1) + "!A1:" + Letter[brains[i].dimens[j] - 1] + brains[i].dimens[j + 1];
 
                         List<List<Object>> values = new ArrayList<>();
                         for (int k = 0; k < brains[i].weights[j].length; k++) {
@@ -436,6 +449,7 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
             try {
                 return getDataFromApi();
             } catch (Exception e) {
+                e.printStackTrace();
                 mLastError = e;
                 cancel(true);
                 return null;
@@ -464,7 +478,6 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
                     }
                     results[net][i] = layer;
                 }
-
             }
             return results;
         }
