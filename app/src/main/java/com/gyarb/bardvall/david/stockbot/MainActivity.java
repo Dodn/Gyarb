@@ -19,6 +19,7 @@ import android.text.TextUtils;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.ViewFlipper;
 
@@ -43,6 +44,7 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Random;
 
 import pub.devrel.easypermissions.AfterPermissionGranted;
 import pub.devrel.easypermissions.EasyPermissions;
@@ -94,10 +96,16 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
     int[] GenePred1Dimens = {7, 3, 3, 1};
 
     double[][][] defaultWeights; {defaultWeights = new double[][][]{{{0}}};}
-    String exampleRange = "Sheet1!A1:G";
+
+    //0: no activation
+    //1: ReLU
+    //2: Leaky ReLU (leak = 0.1)
+    //3: Sigmoid (beta = 1)
+    int[] defaultActivations = {2, 2, 2, 3};
 
     static String[] Letter = {"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"};
     private TextView mOutputText;
+    private TextView mOutputText2;
     private Button mCallApiButton;
     ProgressDialog mProgress;
     GoogleAccountCredential mCredential;
@@ -111,6 +119,7 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
 
     private static final String GET_BUTTON_TEXT = "Download Brains";
     private static final String POST_BUTTON_TEXT = "Post Brains";
+    private static final String EDIT_BUTTON_TEXT = "Edit Brains";
     private static final String PREF_ACCOUNT_NAME = "accountName";
     private static final String[] SCOPES = { SheetsScopes.SPREADSHEETS};
 
@@ -123,6 +132,7 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         BottomNavigationView navigation = findViewById(R.id.navigation);
         navigation.setOnNavigationItemSelectedListener(mOnNavigationItemSelectedListener);
         mOutputText = findViewById(R.id.textView1);
+        mOutputText2 = findViewById(R.id.textView2);
         mProgress = new ProgressDialog(this);
 
         final Button PostButton = findViewById(R.id.ButtonPost);
@@ -151,16 +161,44 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
             }
         });
 
+        final Button EditButton = findViewById(R.id.ButtonEdit);
+        EditButton.setText(EDIT_BUTTON_TEXT);
+        EditButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                EditButton.setEnabled(false);
+                mProgress.show();
+                EditText dimensInput = findViewById(R.id.editTextDimens);
+                EditText randomInput = findViewById(R.id.editTextRand);
+                String[] dimText = dimensInput.getText().toString().split(",");
+                int[] dimensions = new int[dimText.length];
+                try {
+                    for (int i = 0; i < dimText.length; i++) {
+                        dimensions[i] = Integer.parseInt(dimText[i]);
+                    }
+                    GeneticPredict1 = Edit(GeneticPredict1,
+                            dimensions,
+                            Double.parseDouble(randomInput.getText().toString()));
+                } catch (NumberFormatException e) {
+                    e.printStackTrace();
+                    mOutputText2.setText("Syntax Error");
+                }
+                EditButton.setEnabled(true);
+                mProgress.hide();
+            }
+        });
+
         mCredential = GoogleAccountCredential.usingOAuth2(
                 getApplicationContext(), Arrays.asList(SCOPES))
                 .setBackOff(new ExponentialBackOff());
 
         for (int i = 0; i < GeneticPredict1.length; i++) {
-            GeneticPredict1[i] = new Brain(GenePred1ID[i], GenePred1Dimens, defaultWeights);
+            GeneticPredict1[i] = new Brain(GenePred1ID[i], GenePred1Dimens, defaultWeights, 0.0, defaultActivations);
         }
     }
 
     private void getResultsFromApi() {
+        final Brain[] testpost = {GeneticPredict1[0]};
         if (! isGooglePlayServicesAvailable()) {
             acquireGooglePlayServices();
         } else if (mCredential.getSelectedAccountName() == null) {
@@ -294,22 +332,141 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         dialog.show();
     }
 
-    public static double[] Think(double[][][] brain, double[] data){
-        double[][] inputs = new double[data.length][1];
-        for (int i = 0; i < data.length; i++) {
-            inputs[i][0] = data[i];
+    public void Train(Brain[] input, boolean GeneticLearn, int newKid, int dedOlds, double mutProb, double mutFact, double mutInc, int trialsPerGen){
+
+        if(GeneticLearn){
+
+            String[] IDS = new String[input.length];
+            for (int i = 0; i < input.length; i++) {
+                IDS[i] = input[i].id;
+            }
+
+            Brain[] trials = Reproduce(input, newKid, dedOlds, mutProb, mutFact, mutInc);
+
+            for (int i = 0; i < trialsPerGen; i++) {
+                for (Brain trial : trials) {
+                    trial.error += Error(Think(trial, ), );
+                }
+            }
+
+            Brain[] improved = KillOff(Sort(trials), input.length);
+
+            for (int i = 0; i < improved.length; i++) {
+                improved[i].error = 0.0;
+                improved[i].id = IDS[i];
+            }
+
+        }
+    }
+
+    public static Brain[] Edit(Brain[] input, int[] dimens, double maxAbs){
+        Random rand = new Random();
+        for (int i = 0; i < input.length; i++) {
+            input[i].dimens = dimens;
+
+            double[][][] weights = new double[dimens.length - 1][][];
+            for (int j = 0; j < weights.length; j++) {
+                double[][] layer = new double[dimens[j] + 1][dimens[j + 1]];
+                for (int k = 0; k < dimens[j] + 1; k++) {
+
+                    for (int l = 0; l < dimens[j + 1]; l++) {
+
+                        layer[k][l] = (rand.nextDouble() * 2.0 - 1.0) * maxAbs;
+                    }
+                }
+                weights[j] = layer;
+            }
+            input[i].weights = weights;
+        }
+        return input;
+    }
+
+    public static Brain[] Sort(Brain[] input){
+        int n = input.length;
+        boolean kek = true;
+
+        for (int i = 0; i < n - 1; i++) {
+            if (kek){
+                kek = false;
+                for (int j = 0; j < n - i - 1; j++) {
+                    if (input[j].error > input[j + 1].error) {
+                        Brain temp = input[j];
+                        input[j] = input[j + 1];
+                        input[j + 1] = temp;
+                        kek = true;
+                    }
+                }
+            } else break;
+        }
+        return input;
+    }
+
+    public static Brain[] Reproduce(Brain[] parents, int newChildren, int deadParents, double mutationProbability, double mutationFactor, double mutationIncrement){
+        int totalParents = parents.length;
+        int aliveParents = totalParents - deadParents;
+        Brain[] children = new Brain[newChildren];
+        Random rand = new Random();
+
+        if (deadParents > newChildren || deadParents > totalParents || mutationProbability < 0.0 || mutationProbability > 1.0 || mutationFactor < 1.0) throw new RuntimeException("Illegal repoduction arguments.");
+
+        for (int i = 0; i < newChildren; i++) {
+            Brain mom = parents[i % totalParents];
+            double[][][] kid = mom.weights;
+            for (int j = 0; j < kid.length; j++) {
+                for (int k = 0; k < kid[j].length; k++) {
+                    for (int l = 0; l < kid[j][k].length; l++) {
+                        if (rand.nextDouble() < mutationProbability) {
+                            kid[j][k][l] = rand.nextFloat() < 0.5 ?
+                                    kid[j][k][l] * (1.0 + rand.nextDouble() * (mutationFactor - 1.0)) + (rand.nextDouble() * 2.0 - 1.0) * mutationIncrement
+                                    :
+                                    kid[j][k][l] / (1.0 + rand.nextDouble() * (mutationFactor - 1.0)) + (rand.nextDouble() * 2.0 - 1.0) * mutationIncrement;
+                        }
+                    }
+                }
+            }
+            mom.weights = kid;
+            children[i] = mom;
         }
 
-        for (double[][] weightLayer : brain) {
-            inputs = Activation(mult(weightLayer, inputs));
+        Brain[] newGen = new Brain[aliveParents + newChildren];
+        for (int i = 0; i < newGen.length; i++) {
+            if (i < aliveParents) {
+                newGen[i] = parents[i];
+            } else {
+                newGen[i] = children[i - aliveParents];
+            }
+        }
+        return newGen;
+    }
+
+    public static Brain[] KillOff(Brain[] population, int numSurvivors){
+        if (numSurvivors > population.length) throw new RuntimeException("Illegal kill_off arguments.");
+        Brain[] survivors = new Brain[numSurvivors];
+        System.arraycopy(population, 0, survivors, 0, numSurvivors);
+        return survivors;
+    }
+
+    public static double[] Think(Brain brain, double[] data){
+        double[][] inputs = new double[1][data.length];
+        inputs[0] = data;
+
+        for (int i = 0; i < brain.weights.length; i++) {
+            double[][] weightLayer = brain.weights[i];
+
+            inputs = addBias(inputs);
+            inputs = Activation(mult(inputs, weightLayer), brain.activations[i]);
         }
 
-        double[] results = new double[inputs.length];
-        for (int i = 0; i < inputs.length; i++) {
-            results[i] = inputs[i][0];
-        }
+        return inputs[0];
+    }
 
-        return results;
+    public static double Error(double[] result, double[] expected){
+        if (result.length != expected.length) throw new RuntimeException("Net outputs don't match expected");
+        double error = 0.0;
+        for (int i = 0; i < result.length; i++) {
+            error += Math.pow((result[i] - expected[i]), 2.0);
+        }
+        return  error;
     }
 
     public static double[][] mult(double[][] a, double[][] b) {
@@ -326,12 +483,36 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         return c;
     }
 
-    public static double[][] Activation(double[][] input){
+    public static double[][] transpose(double[][] input) {
+        double[][] output = new double[input[0].length][input.length];
+        for (int i = 0; i < input.length; i++)
+            for (int j = 0; j < input[0].length; j++)
+                output[j][i] = input[i][j];
+        return output;
+    }
+
+    public static double[][] addBias(double[][] input){
+        double[][] output = new double[1][input.length + 1];
+        for (int i = 0; i < input.length; i++) {
+            output[0][i] = input[0][i];
+        }
+        output[0][input.length] = 1.0;
+        return output;
+    }
+
+    public static double[][] Activation(double[][] input, int functionIndex){
 
         double[][] result = new double[input.length][input[0].length];
         for (int i = 0; i < input.length; i++) {
             for (int j = 0; j < input[i].length; j++) {
-                result[i][j] = LeakyReLU(input[i][j]);
+                switch (functionIndex){
+                    case 1: result[i][j] = ReLU(input[i][j]);
+                    break;
+                    case 2: result[i][j] = LeakyReLU(input[i][j]);
+                    break;
+                    case 3: result[i][j] = Sigmoid(input[i][j]);
+                    default: result[i][j] = input[i][j];
+                }
             }
         }
         return result;
@@ -351,6 +532,10 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         } else {
             return (input * 0.1);
         }
+    }
+
+    public static double Sigmoid(double input){
+        return (1D / (1D + Math.pow(Math.E, -input)));
     }
 
     private class PostBrains extends AsyncTask<Void, Void, String>{
@@ -379,18 +564,22 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         protected String doInBackground(Void...params) {
 
             try {
-                for (int i = 0; i < brains.length; i++) {
+                for (int net = 0; net < brains.length; net++) {
 
-                    for (int j = 0; j < brains[i].weights.length; j++) {
+                    for (int i = 0; i < brains[net].weights.length; i++) {
+                        int dimIn = brains[net].dimens[i] + 1;
+                        int dimOut = brains[net].dimens[i + 1];
 
-                        String range = "Layer" + (j+1) + "!A1:" + Letter[brains[i].dimens[j] - 1] + brains[i].dimens[j + 1];
+                        String range = "Layer" + (i+1) + "!A1:" + Letter[dimOut - 1] + dimIn;
+
+                        double[][] post = brains[net].weights[i];
 
                         List<List<Object>> values = new ArrayList<>();
-                        for (int k = 0; k < brains[i].weights[j].length; k++) {
+                        for (int j = 0; j < post.length; j++) {
 
                             List<Object> row = new ArrayList<>();
-                            for (int l = 0; l < (brains[i].weights[j][k].length); l++) {
-                                row.add((brains[i].weights[j][k][l]));
+                            for (int k = 0; k < (post[j].length); k++) {
+                                row.add((post[j][k]));
                             }
                             values.add(row);
                         }
@@ -398,8 +587,8 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
                         ValueRange body = new ValueRange()
                                 .setValues(values);
                         UpdateValuesResponse result =
-                                mService.spreadsheets().values().update(brains[i].id, range, body)
-                                        .setValueInputOption("USER_ENTERED")
+                                mService.spreadsheets().values().update(brains[net].id, range, body)
+                                        .setValueInputOption("RAW")
                                         .execute();
 
                     }
@@ -462,17 +651,23 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
 
             for (int net = 0; net < spreadsheetIds.length; net++) {
                 for (int i = 0; i < dimens.length - 1; i++) {
-
-                    String range = "Layer" + (i+1) + "!A1:" + Letter[dimens[i] - 1] + dimens[i + 1];
+                    int dimIn = dimens[i] + 1;
+                    int dimOut = dimens[i + 1];
+                    String range = "Layer" + (i+1) + "!A1:" + Letter[dimOut - 1] + dimIn;
                     ValueRange response = this.mService.spreadsheets().values()
                             .get(spreadsheetIds[net], range)
                             .execute();
                     List<List<Object>> values = response.getValues();
-                    double[][] layer = new double[dimens[i + 1]][dimens[i]];
+                    double[][] layer = new double[dimIn][dimOut];
                     if (values != null) {
-                        for (int j = 0; j < dimens[i + 1]; j++) {
-                            for (int k = 0; k < dimens[i]; k++){
-                                layer[j][k] = Double.parseDouble(values.get(j).get(k).toString());
+                        for (int j = 0; j < dimIn; j++) {
+                            for (int k = 0; k < dimOut; k++){
+                                String value = values.get(j).get(k).toString();
+                                if (value.equals("")) {
+                                    layer[j][k] = 0.0;
+                                } else {
+                                    layer[j][k] = Double.parseDouble(value);
+                                }
                             }
                         }
                     }

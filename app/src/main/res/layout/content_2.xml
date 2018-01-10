@@ -9,4 +9,25 @@
         android:layout_height="wrap_content"
         android:text="Dash" />
 
+    <EditText
+        android:id="@+id/editTextDimens"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ems="10"
+        android:hint="Dimens (ex. 9,6,5,2)"
+        android:inputType="text" />
+
+    <EditText
+        android:id="@+id/editTextRand"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ems="10"
+        android:hint="Max random abs"
+        android:inputType="numberDecimal" />
+
+    <Button
+        android:id="@+id/ButtonEdit"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
 </LinearLayout>
