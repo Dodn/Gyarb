@@ -96,6 +96,7 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
     int[] GenePred1Dimens = {7, 3, 3, 1};
 
     double[][][] defaultWeights; {defaultWeights = new double[][][]{{{0}}};}
+    double[][] defaultNodeValues; {defaultNodeValues = new double[][]{{0}};}
 
     //0: no activation
     //1: ReLU
@@ -193,7 +194,7 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
                 .setBackOff(new ExponentialBackOff());
 
         for (int i = 0; i < GeneticPredict1.length; i++) {
-            GeneticPredict1[i] = new Brain(GenePred1ID[i], GenePred1Dimens, defaultWeights, 0.0, defaultActivations);
+            GeneticPredict1[i] = new Brain(GenePred1ID[i], GenePred1Dimens, defaultWeights, defaultNodeValues, 0.0, defaultActivations);
         }
     }
 
@@ -332,7 +333,7 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         dialog.show();
     }
 
-    public void Train(Brain[] input, boolean GeneticLearn, int newKid, int dedOlds, double mutProb, double mutFact, double mutInc, int trialsPerGen){
+    public void Train(Brain[] input, boolean GeneticLearn, double mutProb, double mutFact, double mutInc, int batchSize){
 
         if(GeneticLearn){
 
@@ -341,21 +342,30 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
                 IDS[i] = input[i].id;
             }
 
-            Brain[] trials = Reproduce(input, newKid, dedOlds, mutProb, mutFact, mutInc);
+            input = Reproduce(input, input.length, 0, mutProb, mutFact, mutInc);
 
-            for (int i = 0; i < trialsPerGen; i++) {
-                for (Brain trial : trials) {
-                    trial.error += Error(Think(trial, ), );
+            for (int i = 0; i < batchSize; i++) {
+                for (int j = 0; j < input.length; j++) {
+                    //input[i].preActivationValues = Think(input[i], );
+                    input[i].error += Error(Think(input[i], )[0], );
                 }
             }
 
-            Brain[] improved = KillOff(Sort(trials), input.length);
+            input = KillOff(Sort(input), input.length);
 
-            for (int i = 0; i < improved.length; i++) {
-                improved[i].error = 0.0;
-                improved[i].id = IDS[i];
+            //Log errors here
+
+            for (int i = 0; i < input.length; i++) {
+                input[i].error = 0.0;
+                input[i].id = IDS[i];
             }
 
+        } else {
+
+            for (int i = 0; i < batchSize; i++) {
+                //input[i].preActivationValues = Think(input[i], );
+                input[i].error += Error(Think(input[i], )[0], );
+            }
         }
     }
 
@@ -446,25 +456,29 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         return survivors;
     }
 
-    public static double[] Think(Brain brain, double[] data){
+    public static double[][] Think(Brain brain, double[] data){
         double[][] inputs = new double[1][data.length];
         inputs[0] = data;
+        double[][] savedLayerSums = new double[brain.dimens.length + 1][];
+        savedLayerSums[1] = data;
 
         for (int i = 0; i < brain.weights.length; i++) {
             double[][] weightLayer = brain.weights[i];
 
             inputs = addBias(inputs);
-            inputs = Activation(mult(inputs, weightLayer), brain.activations[i]);
+            double[][] temp = mult(inputs, weightLayer);
+            savedLayerSums[i + 2] = temp[0];
+            inputs = Activation(temp, brain.activations[i]);
         }
-
-        return inputs[0];
+        savedLayerSums[0] = data;
+        return savedLayerSums;
     }
 
     public static double Error(double[] result, double[] expected){
         if (result.length != expected.length) throw new RuntimeException("Net outputs don't match expected");
         double error = 0.0;
         for (int i = 0; i < result.length; i++) {
-            error += Math.pow((result[i] - expected[i]), 2.0);
+            error += Math.pow((result[i] - expected[i]), 2.0) / 2.0;
         }
         return  error;
     }
