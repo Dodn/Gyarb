@@ -74,8 +74,8 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
 
     };
 
-    Brain[] GeneticPredict1 = new Brain[GenePred1ID.length];
-    static String[] GenePred1ID = {
+    Brain[] Genetic1 = new Brain[Gene1ID.length];
+    static String[] Gene1ID = {
             "1-6UIogljURV6TLVcx5lCzqa-s2ce04lK1ypcdFj6h1Q",
             "1JcP1ChW4q3VUy2ir86UqrD3bUPQT0DQ7V5gzqftbp-U",
             "1DGFDNP0FycQnnZhJWkap9BDmX_2IVcP_qcOK7aWt8Mo",
@@ -93,7 +93,13 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
             "1t5BWe3NGPYZknwvyYt06GpXa4h-VBvSkyVPqeg46-A4",
             "1dTphuOKnbph3RRW8ofg44_EEzTRhNopmya6juWLsYYI"
     };
-    int[] GenePred1Dimens = {7, 3, 3, 1};
+    int[] Gene1Dimens = {7, 3, 3, 1};
+
+    Brain[] BackProp1 = new Brain[Prop1ID.length];
+    static String[] Prop1ID = {
+            "1nDgK8TGpDPYoaHmG0fwOARUO_dOOdNne5dc-pqDFq-k"
+    };
+    int[] Prop1Dimens = {7, 3, 3, 1};
 
     double[][][] defaultWeights; {defaultWeights = new double[][][]{{{0}}};}
     double[][] defaultNodeValues; {defaultNodeValues = new double[][]{{0}};}
@@ -102,7 +108,7 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
     //1: ReLU
     //2: Leaky ReLU (leak = 0.1)
     //3: Sigmoid (beta = 1)
-    int[] defaultActivations = {2, 2, 2, 3};
+    int[] defaultActivations = {2, 2, 3};
 
     static String[] Letter = {"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"};
     private TextView mOutputText;
@@ -177,7 +183,7 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
                     for (int i = 0; i < dimText.length; i++) {
                         dimensions[i] = Integer.parseInt(dimText[i]);
                     }
-                    GeneticPredict1 = Edit(GeneticPredict1,
+                    Genetic1 = Edit(Genetic1,
                             dimensions,
                             Double.parseDouble(randomInput.getText().toString()));
                 } catch (NumberFormatException e) {
@@ -193,13 +199,13 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
                 getApplicationContext(), Arrays.asList(SCOPES))
                 .setBackOff(new ExponentialBackOff());
 
-        for (int i = 0; i < GeneticPredict1.length; i++) {
-            GeneticPredict1[i] = new Brain(GenePred1ID[i], GenePred1Dimens, defaultWeights, defaultNodeValues, 0.0, defaultActivations);
+        for (int i = 0; i < Genetic1.length; i++) {
+            Genetic1[i] = new Brain(Gene1ID[i], Gene1Dimens, defaultWeights, defaultActivations);
         }
     }
 
     private void getResultsFromApi() {
-        final Brain[] testpost = {GeneticPredict1[0]};
+        final Brain[] testpost = {Genetic1[0]};
         if (! isGooglePlayServicesAvailable()) {
             acquireGooglePlayServices();
         } else if (mCredential.getSelectedAccountName() == null) {
@@ -207,13 +213,13 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         } else if (! isDeviceOnline()) {
             mOutputText.setText("No network connection available.");
         } else if (postORget){
-            new PostBrains(mCredential, GeneticPredict1).execute();
+            new PostBrains(mCredential, Genetic1).execute();
         } else {
-            new GetBrains(mCredential, GeneticPredict1, new GetBrainCallback() {
+            new GetBrains(mCredential, Genetic1, new GetBrainCallback() {
                 @Override
                 public void onResult(double[][][][] brain) {
-                    for (int i = 0; i < GeneticPredict1.length; i++) {
-                        GeneticPredict1[i].weights = brain[i];
+                    for (int i = 0; i < Genetic1.length; i++) {
+                        Genetic1[i].weights = brain[i];
                     }
                 }
             }).execute();
@@ -346,8 +352,7 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
 
             for (int i = 0; i < batchSize; i++) {
                 for (int j = 0; j < input.length; j++) {
-                    //input[i].preActivationValues = Think(input[i], );
-                    input[i].error += Error(Think(input[i], )[0], );
+                    input[i].Think(,);
                 }
             }
 
@@ -356,20 +361,24 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
             //Log errors here
 
             for (int i = 0; i < input.length; i++) {
-                input[i].error = 0.0;
+                input[i].ResetError();
                 input[i].id = IDS[i];
             }
 
         } else {
 
+            double[][][] gradient = input[0].weights;
+            gradient = fill3DMatrix(gradient, 0);
             for (int i = 0; i < batchSize; i++) {
-                //input[i].preActivationValues = Think(input[i], );
-                input[i].error += Error(Think(input[i], )[0], );
+                input[0].ResetError();
+                input[0].Think(,);
+                gradient = add3DMatrix(gradient, BackPropogate(input[0], mutFact, mutInc));
             }
+
         }
     }
 
-    public static Brain[] Edit(Brain[] input, int[] dimens, double maxAbs){
+    public Brain[] Edit(Brain[] input, int[] dimens, double maxAbs){
         Random rand = new Random();
         for (int i = 0; i < input.length; i++) {
             input[i].dimens = dimens;
@@ -391,7 +400,7 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         return input;
     }
 
-    public static Brain[] Sort(Brain[] input){
+    public Brain[] Sort(Brain[] input){
         int n = input.length;
         boolean kek = true;
 
@@ -411,7 +420,7 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         return input;
     }
 
-    public static Brain[] Reproduce(Brain[] parents, int newChildren, int deadParents, double mutationProbability, double mutationFactor, double mutationIncrement){
+    public Brain[] Reproduce(Brain[] parents, int newChildren, int deadParents, double mutationProbability, double mutationFactor, double mutationIncrement){
         int totalParents = parents.length;
         int aliveParents = totalParents - deadParents;
         Brain[] children = new Brain[newChildren];
@@ -449,107 +458,58 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         return newGen;
     }
 
-    public static Brain[] KillOff(Brain[] population, int numSurvivors){
+    public Brain[] KillOff(Brain[] population, int numSurvivors){
         if (numSurvivors > population.length) throw new RuntimeException("Illegal kill_off arguments.");
         Brain[] survivors = new Brain[numSurvivors];
         System.arraycopy(population, 0, survivors, 0, numSurvivors);
         return survivors;
     }
 
-    public static double[][] Think(Brain brain, double[] data){
-        double[][] inputs = new double[1][data.length];
-        inputs[0] = data;
-        double[][] savedLayerSums = new double[brain.dimens.length + 1][];
-        savedLayerSums[1] = data;
-
-        for (int i = 0; i < brain.weights.length; i++) {
-            double[][] weightLayer = brain.weights[i];
-
-            inputs = addBias(inputs);
-            double[][] temp = mult(inputs, weightLayer);
-            savedLayerSums[i + 2] = temp[0];
-            inputs = Activation(temp, brain.activations[i]);
+    public double[][][] BackPropogate(Brain input, double factor, double increment){
+        double[][][] result = input.weights;
+        double[][] chainDelta = new double[result.length][];
+        for (int i = 0; i < chainDelta.length; i++) {
+            chainDelta[i] = new double[input.dimens[i+1]];
         }
-        savedLayerSums[0] = data;
-        return savedLayerSums;
-    }
 
-    public static double Error(double[] result, double[] expected){
-        if (result.length != expected.length) throw new RuntimeException("Net outputs don't match expected");
-        double error = 0.0;
-        for (int i = 0; i < result.length; i++) {
-            error += Math.pow((result[i] - expected[i]), 2.0) / 2.0;
-        }
-        return  error;
-    }
-
-    public static double[][] mult(double[][] a, double[][] b) {
-        int m1 = a.length;
-        int n1 = a[0].length;
-        int m2 = b.length;
-        int n2 = b[0].length;
-        if (n1 != m2) throw new RuntimeException("Illegal matrix dimensions.");
-        double[][] c = new double[m1][n2];
-        for (int i = 0; i < m1; i++)
-            for (int j = 0; j < n2; j++)
-                for (int k = 0; k < n1; k++)
-                    c[i][j] += a[i][k] * b[k][j];
-        return c;
-    }
-
-    public static double[][] transpose(double[][] input) {
-        double[][] output = new double[input[0].length][input.length];
-        for (int i = 0; i < input.length; i++)
-            for (int j = 0; j < input[0].length; j++)
-                output[j][i] = input[i][j];
-        return output;
-    }
-
-    public static double[][] addBias(double[][] input){
-        double[][] output = new double[1][input.length + 1];
-        for (int i = 0; i < input.length; i++) {
-            output[0][i] = input[0][i];
-        }
-        output[0][input.length] = 1.0;
-        return output;
-    }
-
-    public static double[][] Activation(double[][] input, int functionIndex){
-
-        double[][] result = new double[input.length][input[0].length];
-        for (int i = 0; i < input.length; i++) {
-            for (int j = 0; j < input[i].length; j++) {
-                switch (functionIndex){
-                    case 1: result[i][j] = ReLU(input[i][j]);
-                    break;
-                    case 2: result[i][j] = LeakyReLU(input[i][j]);
-                    break;
-                    case 3: result[i][j] = Sigmoid(input[i][j]);
-                    default: result[i][j] = input[i][j];
-                }
-            }
-        }
         return result;
     }
 
-    public static double ReLU(double input){
-        if (input > 0) {
-            return input;
-        } else {
-            return 0;
+    double[][][] add3DMatrix(double[][][] matrix1, double[][][] matrix2){
+
+        if (matrix1.length != matrix2.length) throw new RuntimeException("Illegal matrix sizes.");
+
+        for (int i = 0; i < matrix1.length; i++) {
+
+            if (matrix1[i].length != matrix2[i].length) throw new RuntimeException("Illegal matrix sizes.");
+
+            for (int j = 0; j < matrix1[i].length; j++) {
+
+                if (matrix1[i][j].length != matrix2[i][j].length) throw new RuntimeException("Illegal matrix sizes.");
+
+                for (int k = 0; k < matrix1[i][j].length; k++) {
+
+                    matrix1[i][j][k] += matrix2[i][j][k];
+                }
+            }
         }
+
+        return matrix1;
     }
 
-    public static double LeakyReLU(double input){
-        if (input > 0) {
-            return input;
-        } else {
-            return (input * 0.1);
-        }
-    }
+    double[][][] fill3DMatrix(double[][][] input, double value){
 
-    public static double Sigmoid(double input){
-        return (1D / (1D + Math.pow(Math.E, -input)));
+        for (int i = 0; i < input.length; i++) {
+
+            for (int j = 0; j < input[i].length; j++) {
+
+                for (int k = 0; k < input[i][j].length; k++) {
+
+                    input[i][j][k] = value;
+                }
+            }
+        }
+        return input;
     }
 
     private class PostBrains extends AsyncTask<Void, Void, String>{
