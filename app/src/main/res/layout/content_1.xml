@@ -7,7 +7,7 @@
         android:id="@+id/textView1"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Home" />
+        android:text="Current mode: Genetic" />
 
     <Button
         android:id="@+id/ButtonGet"
@@ -16,6 +16,11 @@
 
     <Button
         android:id="@+id/ButtonPost"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+    <Button
+        android:id="@+id/ButtonToggle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content" />
 

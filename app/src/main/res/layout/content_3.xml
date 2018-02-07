@@ -9,4 +9,9 @@
         android:layout_height="wrap_content"
         android:text="Note" />
 
+    <Button
+        android:id="@+id/ButtonTrain"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
 </LinearLayout>

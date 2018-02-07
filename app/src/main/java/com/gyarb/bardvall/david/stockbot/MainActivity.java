@@ -101,8 +101,8 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
     };
     int[] Prop1Dimens = {7, 3, 3, 1};
 
-    double[][][] defaultWeights; {defaultWeights = new double[][][]{{{0}}};}
-    double[][] defaultNodeValues; {defaultNodeValues = new double[][]{{0}};}
+    double[][][] defaultWeights; {defaultWeights = new double[][][]{{{0}}, {{0}}, {{0}}};}
+    //double[][] defaultNodeValues; {defaultNodeValues = new double[][]{{0}};}
 
     //0: no activation
     //1: ReLU
@@ -113,11 +113,13 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
     static String[] Letter = {"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"};
     private TextView mOutputText;
     private TextView mOutputText2;
+    private TextView mOutputText3;
     private Button mCallApiButton;
     ProgressDialog mProgress;
     GoogleAccountCredential mCredential;
 
     boolean postORget = false;
+    boolean geneORprop = true;
 
     static final int REQUEST_ACCOUNT_PICKER = 1000;
     static final int REQUEST_AUTHORIZATION = 1001;
@@ -140,7 +142,24 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         navigation.setOnNavigationItemSelectedListener(mOnNavigationItemSelectedListener);
         mOutputText = findViewById(R.id.textView1);
         mOutputText2 = findViewById(R.id.textView2);
+        mOutputText3 = findViewById(R.id.textView3);
         mProgress = new ProgressDialog(this);
+
+        final Button ToggleButton = findViewById(R.id.ButtonToggle);
+        ToggleButton.setText("Switch to Backprop");
+        ToggleButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if (geneORprop){
+                    mOutputText.setText("Current mode: Backprop");
+                    ToggleButton.setText("Switch to Genetic");
+                } else{
+                    mOutputText.setText("Current mode: Genetic");
+                    ToggleButton.setText("Switch to Backprop");
+                }
+                geneORprop = !geneORprop;
+            }
+        });
 
         final Button PostButton = findViewById(R.id.ButtonPost);
         PostButton.setText(POST_BUTTON_TEXT);
@@ -175,22 +194,62 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
             public void onClick(View view) {
                 EditButton.setEnabled(false);
                 mProgress.show();
+                mOutputText2.setText("");
                 EditText dimensInput = findViewById(R.id.editTextDimens);
                 EditText randomInput = findViewById(R.id.editTextRand);
                 String[] dimText = dimensInput.getText().toString().split(",");
                 int[] dimensions = new int[dimText.length];
+                double maxAbs;
                 try {
                     for (int i = 0; i < dimText.length; i++) {
                         dimensions[i] = Integer.parseInt(dimText[i]);
                     }
-                    Genetic1 = Edit(Genetic1,
-                            dimensions,
-                            Double.parseDouble(randomInput.getText().toString()));
+                    maxAbs = Double.parseDouble(randomInput.getText().toString());
+
+                    if (geneORprop){
+                        for (int i = 0; i < Genetic1.length; i++) {
+                            Genetic1[i].ResetWeights(dimensions, defaultActivations, maxAbs);
+                        }
+                    } else{
+                        for (int i = 0; i < BackProp1.length; i++) {
+                            BackProp1[i].ResetWeights(dimensions, defaultActivations, maxAbs);
+                        }
+                    }
+                    mOutputText2.setText("Reset successful");
                 } catch (NumberFormatException e) {
                     e.printStackTrace();
                     mOutputText2.setText("Syntax Error");
                 }
                 EditButton.setEnabled(true);
+                mProgress.hide();
+            }
+        });
+
+        final Button TrainButton = findViewById(R.id.ButtonTrain);
+        TrainButton.setText("test training");
+        TrainButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                TrainButton.setEnabled(false);
+                mProgress.show();
+                double[][] testInput = {{1.0, 0.34, 0.74, 0.06, 0.53, 0.12, 0.81}};
+                double[][] testExpected = {{0.5}};
+                String results = "";
+
+                if (geneORprop){
+                    Genetic1 = TrainOneGeneration(Genetic1, true, 0.05, 1.005, 0.01, testInput, testExpected);
+
+                    for (int i = 0; i < Genetic1.length; i++) {
+                        results += String.valueOf(Genetic1[i].error);
+                        if(i != Genetic1.length - 1) results += "\n";
+                    }
+                } else{
+                    BackProp1 = TrainOneGeneration(BackProp1, false, 0,0, 0.1, testInput, testExpected);
+                    results = String.valueOf(BackProp1[0].error);
+                }
+
+                mOutputText3.setText(results);
+                TrainButton.setEnabled(true);
                 mProgress.hide();
             }
         });
@@ -202,10 +261,12 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         for (int i = 0; i < Genetic1.length; i++) {
             Genetic1[i] = new Brain(Gene1ID[i], Gene1Dimens, defaultWeights, defaultActivations);
         }
+        for (int i = 0; i < BackProp1.length; i++) {
+            BackProp1[i] = new Brain(Prop1ID[i], Prop1Dimens, defaultWeights, defaultActivations);
+        }
     }
 
     private void getResultsFromApi() {
-        final Brain[] testpost = {Genetic1[0]};
         if (! isGooglePlayServicesAvailable()) {
             acquireGooglePlayServices();
         } else if (mCredential.getSelectedAccountName() == null) {
@@ -213,16 +274,31 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         } else if (! isDeviceOnline()) {
             mOutputText.setText("No network connection available.");
         } else if (postORget){
-            new PostBrains(mCredential, Genetic1).execute();
+            if (geneORprop){
+                new PostBrains(mCredential, Genetic1).execute();
+            } else {
+                new PostBrains(mCredential, BackProp1).execute();
+            }
         } else {
-            new GetBrains(mCredential, Genetic1, new GetBrainCallback() {
-                @Override
-                public void onResult(double[][][][] brain) {
-                    for (int i = 0; i < Genetic1.length; i++) {
-                        Genetic1[i].weights = brain[i];
+            if (geneORprop){
+                new GetBrains(mCredential, Genetic1, new GetBrainCallback() {
+                    @Override
+                    public void onResult(double[][][][] brain) {
+                        for (int i = 0; i < Genetic1.length; i++) {
+                            Genetic1[i].weights = brain[i];
+                        }
                     }
-                }
-            }).execute();
+                }).execute();
+            } else {
+                new GetBrains(mCredential, BackProp1, new GetBrainCallback() {
+                    @Override
+                    public void onResult(double[][][][] brain) {
+                        for (int i = 0; i < BackProp1.length; i++) {
+                            BackProp1[i].weights = brain[i];
+                        }
+                    }
+                }).execute();
+            }
         }
     }
 
@@ -339,64 +415,46 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         dialog.show();
     }
 
-    public void Train(Brain[] input, boolean GeneticLearn, double mutProb, double mutFact, double mutInc, int batchSize){
+    public Brain[] TrainOneGeneration(Brain[] input, boolean GeneticLearn, double mutProb, double mutFact, double mutInc, double[][] trainInputs, double[][] trainExpected){
+
+        //if (trainInputs.length != trainExpected.length) throw new RuntimeException("Illegal matrix dimensions.");
+        int batchSize = trainInputs.length;
+        int populationSize = input.length;
 
         if(GeneticLearn){
 
-            String[] IDS = new String[input.length];
-            for (int i = 0; i < input.length; i++) {
+            String[] IDS = new String[populationSize];
+            for (int i = 0; i < populationSize; i++) {
                 IDS[i] = input[i].id;
             }
 
-            input = Reproduce(input, input.length, 0, mutProb, mutFact, mutInc);
-
-            for (int i = 0; i < batchSize; i++) {
-                for (int j = 0; j < input.length; j++) {
-                    input[i].Think(,);
-                }
-            }
-
-            input = KillOff(Sort(input), input.length);
-
-            //Log errors here
+            input = Reproduce(input, mutProb, mutFact, mutInc);
 
             for (int i = 0; i < input.length; i++) {
                 input[i].ResetError();
+                for (int j = 0; j < batchSize; j++) {
+                    double[] resultClassification = input[i].Think(trainInputs[j], trainExpected[j]); //image data, correct classification
+                }
+            }
+
+            input = KillOff(Sort(input), populationSize);
+
+            for (int i = 0; i < populationSize; i++) {
                 input[i].id = IDS[i];
             }
 
         } else {
 
-            double[][][] gradient = input[0].weights;
+            double[][][] gradient = input[0].ctrlCctrlV().weights;
             gradient = fill3DMatrix(gradient, 0);
             for (int i = 0; i < batchSize; i++) {
                 input[0].ResetError();
-                input[0].Think(,);
-                gradient = add3DMatrix(gradient, BackPropogate(input[0], mutFact, mutInc));
+                double[] resultClassification = input[0].Think(trainInputs[i], trainExpected[i]); //image data, expected result
+                gradient = add3DMatrix(gradient, input[0].BackPropogate(mutInc, trainExpected[i])); //expected results
             }
-
+            input[0].AddGradient(gradient);
         }
-    }
 
-    public Brain[] Edit(Brain[] input, int[] dimens, double maxAbs){
-        Random rand = new Random();
-        for (int i = 0; i < input.length; i++) {
-            input[i].dimens = dimens;
-
-            double[][][] weights = new double[dimens.length - 1][][];
-            for (int j = 0; j < weights.length; j++) {
-                double[][] layer = new double[dimens[j] + 1][dimens[j + 1]];
-                for (int k = 0; k < dimens[j] + 1; k++) {
-
-                    for (int l = 0; l < dimens[j + 1]; l++) {
-
-                        layer[k][l] = (rand.nextDouble() * 2.0 - 1.0) * maxAbs;
-                    }
-                }
-                weights[j] = layer;
-            }
-            input[i].weights = weights;
-        }
         return input;
     }
 
@@ -420,39 +478,19 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         return input;
     }
 
-    public Brain[] Reproduce(Brain[] parents, int newChildren, int deadParents, double mutationProbability, double mutationFactor, double mutationIncrement){
-        int totalParents = parents.length;
-        int aliveParents = totalParents - deadParents;
-        Brain[] children = new Brain[newChildren];
-        Random rand = new Random();
+    public Brain[] Reproduce(Brain[] parents, double mutationProbability, double mutationFactor, double mutationIncrement){
 
-        if (deadParents > newChildren || deadParents > totalParents || mutationProbability < 0.0 || mutationProbability > 1.0 || mutationFactor < 1.0) throw new RuntimeException("Illegal repoduction arguments.");
-
-        for (int i = 0; i < newChildren; i++) {
-            Brain mom = parents[i % totalParents];
-            double[][][] kid = mom.weights;
-            for (int j = 0; j < kid.length; j++) {
-                for (int k = 0; k < kid[j].length; k++) {
-                    for (int l = 0; l < kid[j][k].length; l++) {
-                        if (rand.nextDouble() < mutationProbability) {
-                            kid[j][k][l] = rand.nextFloat() < 0.5 ?
-                                    kid[j][k][l] * (1.0 + rand.nextDouble() * (mutationFactor - 1.0)) + (rand.nextDouble() * 2.0 - 1.0) * mutationIncrement
-                                    :
-                                    kid[j][k][l] / (1.0 + rand.nextDouble() * (mutationFactor - 1.0)) + (rand.nextDouble() * 2.0 - 1.0) * mutationIncrement;
-                        }
-                    }
-                }
-            }
-            mom.weights = kid;
-            children[i] = mom;
-        }
-
-        Brain[] newGen = new Brain[aliveParents + newChildren];
+        if (mutationProbability < 0.0 || mutationProbability > 1.0 || mutationFactor < 1.0) throw new RuntimeException("Illegal repoduction arguments.");
+        int popSize = parents.length;
+        //Brain[] kids = parents.clone();
+        Brain[] newGen = new Brain[2 * popSize];
         for (int i = 0; i < newGen.length; i++) {
-            if (i < aliveParents) {
+            if (i < popSize) {
                 newGen[i] = parents[i];
             } else {
-                newGen[i] = children[i - aliveParents];
+                newGen[i] = parents[i - popSize].ctrlCctrlV();
+                //newGen[i] = parents[i - popSize].;
+                newGen[i].Mutate(mutationProbability, mutationFactor, mutationIncrement);
             }
         }
         return newGen;
@@ -460,41 +498,37 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
 
     public Brain[] KillOff(Brain[] population, int numSurvivors){
         if (numSurvivors > population.length) throw new RuntimeException("Illegal kill_off arguments.");
+        List<Brain> net = new ArrayList<>(numSurvivors);
         Brain[] survivors = new Brain[numSurvivors];
         System.arraycopy(population, 0, survivors, 0, numSurvivors);
         return survivors;
-    }
-
-    public double[][][] BackPropogate(Brain input, double factor, double increment){
-        double[][][] result = input.weights;
-        double[][] chainDelta = new double[result.length][];
-        for (int i = 0; i < chainDelta.length; i++) {
-            chainDelta[i] = new double[input.dimens[i+1]];
-        }
-
-        return result;
     }
 
     double[][][] add3DMatrix(double[][][] matrix1, double[][][] matrix2){
 
         if (matrix1.length != matrix2.length) throw new RuntimeException("Illegal matrix sizes.");
 
+        double[][][] newZ = new double[matrix1.length][][];
         for (int i = 0; i < matrix1.length; i++) {
 
             if (matrix1[i].length != matrix2[i].length) throw new RuntimeException("Illegal matrix sizes.");
 
+            double[][] newY = new double[matrix1[i].length][];
             for (int j = 0; j < matrix1[i].length; j++) {
 
                 if (matrix1[i][j].length != matrix2[i][j].length) throw new RuntimeException("Illegal matrix sizes.");
 
+                double[] newX = new double[matrix1[i][j].length];
                 for (int k = 0; k < matrix1[i][j].length; k++) {
 
-                    matrix1[i][j][k] += matrix2[i][j][k];
+                    newX [k] = matrix1[i][j][k] + matrix2[i][j][k];
                 }
+                newY[j] = newX;
             }
+            newZ[i] = newY;
         }
 
-        return matrix1;
+        return newZ;
     }
 
     double[][][] fill3DMatrix(double[][][] input, double value){
