@@ -39,8 +39,13 @@ import com.google.api.services.sheets.v4.SheetsScopes;
 
 import com.google.api.services.sheets.v4.model.*;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Method;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -73,6 +78,9 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         }
 
     };
+
+    static final String MnistTrainFileName = "mnist_train.csv";
+    static final String MnistTestFileName = "mnist_test.csv";
 
     Brain[] Genetic1 = new Brain[Gene1ID.length];
     static String[] Gene1ID = {
@@ -158,6 +166,21 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
                     ToggleButton.setText("Switch to Backprop");
                 }
                 geneORprop = !geneORprop;
+            }
+        });
+
+        final Button MNISTButton = findViewById(R.id.ButtonMNIST);
+        MNISTButton.setText("Download MNIST training");
+        MNISTButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                postORget = true;
+                MNISTButton.setEnabled(false);
+                mOutputText.setText("");
+                mProgress.show();
+                DownloadMNIST kek = new DownloadMNIST();
+                kek.execute();
+                MNISTButton.setEnabled(true);
             }
         });
 
@@ -417,7 +440,7 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
 
     public Brain[] TrainOneGeneration(Brain[] input, boolean GeneticLearn, double mutProb, double mutFact, double mutInc, double[][] trainInputs, double[][] trainExpected){
 
-        //if (trainInputs.length != trainExpected.length) throw new RuntimeException("Illegal matrix dimensions.");
+        if (trainInputs.length != trainExpected.length) throw new RuntimeException("Illegal matrix dimensions.");
         int batchSize = trainInputs.length;
         int populationSize = input.length;
 
@@ -544,6 +567,61 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
             }
         }
         return input;
+    }
+
+    private class DownloadMNIST extends AsyncTask<Void, Void, String>{
+
+        @Override
+        protected String doInBackground(Void...params) {
+            boolean succes = false;
+            try {
+                final int MEGABYTE = 1024 * 1024;
+
+                URL urlTrain = new URL("https://pjreddie.com/media/files/mnist_train.csv");
+                URL urlTest = new URL("https://pjreddie.com/media/files/mnist_test.csv");
+
+                HttpURLConnection urlConnectionTrain = (HttpURLConnection)urlTrain.openConnection();
+                urlConnectionTrain.connect();
+
+                InputStream inputStreamTrain = urlConnectionTrain.getInputStream();
+                FileOutputStream fileOutputStreamTrain = openFileOutput(MnistTrainFileName, MODE_PRIVATE);
+                int totalSizeTrain = urlConnectionTrain.getContentLength();
+
+                byte[] bufferTrain = new byte[MEGABYTE];
+                int bufferLength = 0;
+                while((bufferLength = inputStreamTrain.read(bufferTrain))>0 ){
+                    fileOutputStreamTrain.write(bufferTrain, 0, bufferLength);
+                }
+                fileOutputStreamTrain.close();
+
+                HttpURLConnection urlConnectionTest = (HttpURLConnection)urlTest.openConnection();
+                urlConnectionTest.connect();
+
+                InputStream inputStreamTest = urlConnectionTest.getInputStream();
+                FileOutputStream fileOutputStreamTest = openFileOutput(MnistTestFileName, MODE_PRIVATE);
+                int totalSize = urlConnectionTest.getContentLength();
+
+                byte[] bufferTest = new byte[MEGABYTE];
+                bufferLength = 0;
+                while((bufferLength = inputStreamTest.read(bufferTest))>0 ){
+                    fileOutputStreamTest.write(bufferTest, 0, bufferLength);
+                }
+                fileOutputStreamTest.close();
+                succes = true;
+
+            } catch (Exception e){
+                e.printStackTrace();
+                succes = false;
+            }
+            return succes ? "MNIST download succesful" : "MNIST download failed";
+        }
+
+        @Override
+        protected void onPostExecute(String response) {
+            mProgress.hide();
+            mOutputText.setText(response);
+        }
+
     }
 
     private class PostBrains extends AsyncTask<Void, Void, String>{
