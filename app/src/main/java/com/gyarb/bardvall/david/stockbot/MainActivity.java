@@ -39,10 +39,13 @@ import com.google.api.services.sheets.v4.SheetsScopes;
 
 import com.google.api.services.sheets.v4.model.*;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -82,6 +85,11 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
     static final String MnistTrainFileName = "mnist_train.csv";
     static final String MnistTestFileName = "mnist_test.csv";
 
+    File MnistTrainCSV;
+    File MnistTestCSV;
+
+    static final int trainBatchSize = 20;
+    static final int testBatchSize = 200;
     Brain[] Genetic1 = new Brain[Gene1ID.length];
     static String[] Gene1ID = {
             "1-6UIogljURV6TLVcx5lCzqa-s2ce04lK1ypcdFj6h1Q",
@@ -128,6 +136,8 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
 
     boolean postORget = false;
     boolean geneORprop = true;
+    int trainingIndex = 1; //clean this up somehow
+    int testIndex = 1;
 
     static final int REQUEST_ACCOUNT_PICKER = 1000;
     static final int REQUEST_AUTHORIZATION = 1001;
@@ -249,30 +259,59 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         });
 
         final Button TrainButton = findViewById(R.id.ButtonTrain);
-        TrainButton.setText("test training");
+        TrainButton.setText("train batch");
         TrainButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 TrainButton.setEnabled(false);
                 mProgress.show();
-                double[][] testInput = {{1.0, 0.34, 0.74, 0.06, 0.53, 0.12, 0.81}};
-                double[][] testExpected = {{0.5}};
                 String results = "";
+                double[][][] batch = getBatchFromFile(MnistTrainFileName, trainingIndex++);
+                double[][] image = batch[0];
+                double[][] label = batch[1];
 
                 if (geneORprop){
-                    Genetic1 = TrainOneGeneration(Genetic1, true, 0.05, 1.005, 0.01, testInput, testExpected);
+                    Genetic1 = TrainOneBatch(Genetic1, true, 0.05, 1.005, 0.01, image, label);
 
                     for (int i = 0; i < Genetic1.length; i++) {
                         results += String.valueOf(Genetic1[i].error);
                         if(i != Genetic1.length - 1) results += "\n";
                     }
                 } else{
-                    BackProp1 = TrainOneGeneration(BackProp1, false, 0,0, 0.1, testInput, testExpected);
+                    BackProp1 = TrainOneBatch(BackProp1, false, 0,0, 0.1, image, label);
                     results = String.valueOf(BackProp1[0].error);
                 }
 
                 mOutputText3.setText(results);
                 TrainButton.setEnabled(true);
+                mProgress.hide();
+            }
+        });
+
+        final Button Testbutton = findViewById(R.id.ButtonTest);
+        Testbutton.setText("test batch");
+        Testbutton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                Testbutton.setEnabled(false);
+                mProgress.show();
+                double percent;
+                double[][][] batch = getBatchFromFile(MnistTestFileName, testIndex++);
+                double[][] image = batch[0];
+                double[][] label = batch[1];
+                int[] labels = new int[label.length];
+                for (int i = 0; i < label.length; i++) {
+                    labels[i] = arrayTOnumber(label[i]);
+                }
+
+                if (geneORprop){
+                    percent = TestOneBatch(Genetic1[0], image, labels);
+                } else{
+                    percent = TestOneBatch(BackProp1[0], image, labels);
+                }
+
+                mOutputText3.setText(String.valueOf(percent * 100));
+                Testbutton.setEnabled(true);
                 mProgress.hide();
             }
         });
@@ -438,7 +477,44 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         dialog.show();
     }
 
-    public Brain[] TrainOneGeneration(Brain[] input, boolean GeneticLearn, double mutProb, double mutFact, double mutInc, double[][] trainInputs, double[][] trainExpected){
+    public double[][][] getBatchFromFile(String baseFileName, int fileIndex){
+        double[][][] batch = new double[2][][];
+
+        try {
+            FileInputStream fis = openFileInput(baseFileName + fileIndex);
+            InputStreamReader isr = new InputStreamReader(fis);
+            BufferedReader bufferedReader = new BufferedReader(isr);
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = bufferedReader.readLine()) != null) {
+                sb.append(line);
+            }
+            String[] fileBatch = sb.toString().split("%");
+
+            double[][] images = new double[fileBatch.length][784];
+            double[][] labels = new double[fileBatch.length][10];
+
+            for (int i = 0; i < fileBatch.length; i++) {
+                String[] values = fileBatch[i].split(",");
+                if (values.length != 785) throw new RuntimeException("Incorrect batchfile");
+
+                labels[i] = numberTOarray(Integer.parseInt(values[0]), 10);
+                for (int j = 0; j < 784; j++) {
+                    images[i][j] = Double.parseDouble(values[j + 1]) / 255.0;
+                }
+            }
+
+            batch[0] = images;
+            batch[1] = labels;
+
+        } catch (IOException | ArrayIndexOutOfBoundsException e) {
+            e.printStackTrace();
+        }
+
+        return batch;
+    }
+
+    public Brain[] TrainOneBatch(Brain[] input, boolean GeneticLearn, double mutProb, double mutFact, double mutInc, double[][] trainInputs, double[][] trainExpected){
 
         if (trainInputs.length != trainExpected.length) throw new RuntimeException("Illegal matrix dimensions.");
         int batchSize = trainInputs.length;
@@ -479,6 +555,41 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         }
 
         return input;
+    }
+
+    public double TestOneBatch(Brain input, double[][] testInputs, int[] testExpected){
+
+        if (testInputs.length != testExpected.length) throw new RuntimeException("Illegal matrix dimensions.");
+        int batchSize = testInputs.length;
+        int numCorrect = 0;
+        for (int i = 0; i < batchSize; i++) {
+            double[] expected = numberTOarray(testExpected[i], 10);
+            double[] results = input.Think(testInputs[i], expected);
+            int guess = arrayTOnumber(results);
+            if (guess == testExpected[i]) numCorrect++;
+        }
+
+        return ((double) numCorrect) / ((double) batchSize);
+    }
+
+    public int arrayTOnumber(double[] input){
+        int result = 0;
+        double max = 0d;
+        for (int i = 0; i < input.length; i++) {
+            if (max < input[i]){
+                max = input[i];
+                result = i;
+            }
+        }
+        return result;
+    }
+
+    public double[] numberTOarray(int number, int arraylength){
+        if (number >= arraylength) throw new RuntimeException("Illegal convert arguments.");
+
+        double[] result = new double[arraylength];
+        result[number] = 1d;
+        return result;
     }
 
     public Brain[] Sort(Brain[] input){
@@ -574,6 +685,8 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         @Override
         protected String doInBackground(Void...params) {
             boolean succes = false;
+            MnistTrainCSV = new File(getFilesDir() + "/" + MnistTrainFileName);
+            MnistTestCSV = new File(getFilesDir() + "/" + MnistTestFileName);
             try {
                 final int MEGABYTE = 1024 * 1024;
 
@@ -607,6 +720,45 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
                     fileOutputStreamTest.write(bufferTest, 0, bufferLength);
                 }
                 fileOutputStreamTest.close();
+
+                //Convert
+                FileInputStream fis = openFileInput(MnistTrainFileName);
+                InputStreamReader isr = new InputStreamReader(fis);
+                BufferedReader bufferedReader = new BufferedReader(isr);
+                String line;
+                String batch = "kek";
+                long trainIndex = 0;
+                while ((line = bufferedReader.readLine()) != null) {
+                    batch += "%" + line;
+                    if (++trainIndex % trainBatchSize == 0) {
+                        FileOutputStream outputStream;
+                        outputStream = openFileOutput(MnistTrainFileName + (int)(trainIndex / trainBatchSize),MODE_PRIVATE);
+                        outputStream.write(batch.getBytes());
+                        outputStream.close();
+                        batch = "kek";
+                    }
+                }
+
+                FileInputStream fis2 = openFileInput(MnistTestFileName);
+                InputStreamReader isr2 = new InputStreamReader(fis2);
+                BufferedReader bufferedReader2 = new BufferedReader(isr2);
+                String line2;
+                String batch2 = "kek";
+                long testIndex = 0;
+                while ((line2 = bufferedReader2.readLine()) != null) {
+                    batch2 += "%" + line2;
+                    if (++trainIndex % testBatchSize == 0) {
+                        FileOutputStream outputStream;
+                        outputStream = openFileOutput(MnistTestFileName + (int)(testIndex / testBatchSize), MODE_PRIVATE);
+                        outputStream.write(batch2.getBytes());
+                        outputStream.close();
+                        batch2 = "kek";
+                    }
+                }
+
+                MnistTrainCSV.delete();
+                MnistTestCSV.delete();
+
                 succes = true;
 
             } catch (Exception e){
