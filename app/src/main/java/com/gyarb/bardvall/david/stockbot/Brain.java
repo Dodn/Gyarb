@@ -61,6 +61,7 @@ public class Brain {
 
         Random rand = new Random();
         this.dimens = dimens;
+        this.activations = activations;
 
         weights = new double[dimens.length - 1][][];
         for (int i = 0; i < weights.length; i++) {
@@ -152,7 +153,7 @@ public class Brain {
     }
 
     public double[][][] BackPropogate(double increment, double[] expectedResults) {
-        double[][][] result = weights;
+        double[][][] result = this.ctrlCctrlV().weights;
         double[][] chainDelta = new double[result.length][];
         for (int i = 0; i < chainDelta.length; i++) {
             int inv = chainDelta.length - 1 - i;

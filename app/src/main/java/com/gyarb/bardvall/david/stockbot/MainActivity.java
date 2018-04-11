@@ -52,6 +52,7 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Queue;
 import java.util.Random;
 
 import pub.devrel.easypermissions.AfterPermissionGranted;
@@ -88,8 +89,11 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
     File MnistTrainCSV;
     File MnistTestCSV;
 
+    String[] PerformanceReport = new String[151];
+
     static final int trainBatchSize = 20;
     static final int testBatchSize = 200;
+
     Brain[] Genetic1 = new Brain[Gene1ID.length];
     static String[] Gene1ID = {
             "1-6UIogljURV6TLVcx5lCzqa-s2ce04lK1ypcdFj6h1Q",
@@ -116,6 +120,8 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
             "1nDgK8TGpDPYoaHmG0fwOARUO_dOOdNne5dc-pqDFq-k"
     };
     int[] Prop1Dimens = {7, 3, 3, 1};
+
+    String ResultSheetID = "1Lh5IUqpIbPRzT7XZyDseGX2hMH7qj1EhzzPezmruQ54";
 
     double[][][] defaultWeights; {defaultWeights = new double[][][]{{{0}}, {{0}}, {{0}}};}
     //double[][] defaultNodeValues; {defaultNodeValues = new double[][]{{0}};}
@@ -202,7 +208,7 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
                 postORget = true;
                 PostButton.setEnabled(false);
                 mOutputText.setText("");
-                getResultsFromApi();
+                PostGet();
                 PostButton.setEnabled(true);
             }
         });
@@ -215,7 +221,7 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
                 postORget = false;
                 mCallApiButton.setEnabled(false);
                 mOutputText.setText("");
-                getResultsFromApi();
+                PostGet();
                 mCallApiButton.setEnabled(true);
             }
         });
@@ -229,23 +235,29 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
                 mProgress.show();
                 mOutputText2.setText("");
                 EditText dimensInput = findViewById(R.id.editTextDimens);
+                EditText activationInput = findViewById(R.id.editTextActivations);
                 EditText randomInput = findViewById(R.id.editTextRand);
                 String[] dimText = dimensInput.getText().toString().split(",");
+                String[] actText = activationInput.getText().toString().split(",");
                 int[] dimensions = new int[dimText.length];
+                int[] activations = new int[actText.length];
                 double maxAbs;
                 try {
                     for (int i = 0; i < dimText.length; i++) {
                         dimensions[i] = Integer.parseInt(dimText[i]);
                     }
+                    for (int i = 0; i < actText.length; i++) {
+                        activations[i] = Integer.parseInt(actText[i]);
+                    }
                     maxAbs = Double.parseDouble(randomInput.getText().toString());
 
                     if (geneORprop){
                         for (int i = 0; i < Genetic1.length; i++) {
-                            Genetic1[i].ResetWeights(dimensions, defaultActivations, maxAbs);
+                            Genetic1[i].ResetWeights(dimensions, activations, maxAbs);
                         }
                     } else{
                         for (int i = 0; i < BackProp1.length; i++) {
-                            BackProp1[i].ResetWeights(dimensions, defaultActivations, maxAbs);
+                            BackProp1[i].ResetWeights(dimensions, activations, maxAbs);
                         }
                     }
                     mOutputText2.setText("Reset successful");
@@ -266,19 +278,29 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
                 TrainButton.setEnabled(false);
                 mProgress.show();
                 String results = "";
-                double[][][] batch = getBatchFromFile(MnistTrainFileName, trainingIndex++);
+                EditText mutProbInput = findViewById(R.id.editTextMutprob);
+                EditText mutFactInput = findViewById(R.id.editTextMutfact);
+                EditText mutIncInput = findViewById(R.id.editTextMutinc);
+                EditText backpropIncInput = findViewById(R.id.editTextBackpropinc);
+
+                double mutProb = Double.parseDouble(mutProbInput.getText().toString());
+                double mutFact = Double.parseDouble(mutFactInput.getText().toString());
+                double mutInc = Double.parseDouble(mutIncInput.getText().toString());
+                double backpropInc = Double.parseDouble(backpropIncInput.getText().toString());
+
+                double[][][] batch = getBatchFromFile(MnistTrainFileName, ((trainingIndex++) -1 ) % 3000 + 1);
                 double[][] image = batch[0];
                 double[][] label = batch[1];
 
                 if (geneORprop){
-                    Genetic1 = TrainOneBatch(Genetic1, true, 0.05, 1.005, 0.01, image, label);
+                    Genetic1 = TrainOneBatch(Genetic1, true, mutProb, mutFact, mutInc, image, label);
 
                     for (int i = 0; i < Genetic1.length; i++) {
                         results += String.valueOf(Genetic1[i].error);
                         if(i != Genetic1.length - 1) results += "\n";
                     }
                 } else{
-                    BackProp1 = TrainOneBatch(BackProp1, false, 0,0, 0.1, image, label);
+                    BackProp1 = TrainOneBatch(BackProp1, false, 0,0, backpropInc, image, label);
                     results = String.valueOf(BackProp1[0].error);
                 }
 
@@ -295,8 +317,8 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
             public void onClick(View view) {
                 Testbutton.setEnabled(false);
                 mProgress.show();
-                double percent;
-                double[][][] batch = getBatchFromFile(MnistTestFileName, testIndex++);
+                int percent;
+                double[][][] batch = getBatchFromFile(MnistTestFileName, 1);
                 double[][] image = batch[0];
                 double[][] label = batch[1];
                 int[] labels = new int[label.length];
@@ -310,9 +332,34 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
                     percent = TestOneBatch(BackProp1[0], image, labels);
                 }
 
-                mOutputText3.setText(String.valueOf(percent * 100));
+                mOutputText3.setText("Percentage: " + (percent / 2) + "." + ((percent % 2) * 5));
                 Testbutton.setEnabled(true);
                 mProgress.hide();
+            }
+        });
+
+        final Button TrainAllButton = findViewById(R.id.ButtonTrainAll);
+        TrainAllButton.setText("train continuously");
+        TrainAllButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+
+                Thread trainLoop = new TrainingThread();
+                trainLoop.start();
+            }
+        });
+
+        final Button PostResultsButton = findViewById(R.id.ButtonPostResult);
+        PostResultsButton.setText("Post Results");
+        PostResultsButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                PostResultsButton.setEnabled(false);
+
+                getResultsFromApi();
+                new PostResults(mCredential, PerformanceReport).execute();
+
+                PostResultsButton.setEnabled(true);
             }
         });
 
@@ -328,6 +375,85 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         }
     }
 
+    private class TrainingThread extends Thread {
+        public void run() {
+
+            EditText mutProbInput = findViewById(R.id.editTextMutprob);
+            EditText mutFactInput = findViewById(R.id.editTextMutfact);
+            EditText mutIncInput = findViewById(R.id.editTextMutinc);
+            EditText backpropIncInput = findViewById(R.id.editTextBackpropinc);
+
+            double mutProb = Double.parseDouble(mutProbInput.getText().toString());
+            double mutFact = Double.parseDouble(mutFactInput.getText().toString());
+            double mutInc = Double.parseDouble(mutIncInput.getText().toString());
+            double backpropInc = Double.parseDouble(backpropIncInput.getText().toString());
+
+            try {
+                int numCorrect = 0;
+                double[][][] image = new double[5][][];
+                double[][][] label = new double[5][][];
+
+                for (int j = 0; j < 5; j++) {
+                    double[][][] batch = getBatchFromFile(MnistTestFileName, j + 1);
+                    image[j] = batch[0];
+                    label[j] = batch[1];
+                    int[] labels = new int[label[j].length];
+                    for (int k = 0; k < label[j].length; k++) {
+                        labels[k] = arrayTOnumber(label[j][k]);
+                    }
+
+                    if (geneORprop){
+                        numCorrect += TestOneBatch(Genetic1[0], image[j], labels);
+                    } else{
+                        numCorrect += TestOneBatch(BackProp1[0], image[j], labels);
+                    }
+                }
+
+                PerformanceReport[0] = (numCorrect / 10) + "." + (numCorrect % 10);
+
+                for (int i = 0; i < 150; i++) {
+                    for (int j = 1; j <= 20; j++) {
+                        double[][][] batch = getBatchFromFile(MnistTrainFileName, i * 20 + j);
+                        double[][] TrainImage = batch[0];
+                        double[][] TrainLabel = batch[1];
+
+                        if (geneORprop){
+                            Genetic1 = TrainOneBatch(Genetic1, true, mutProb, mutFact, mutInc, TrainImage, TrainLabel);
+                        } else{
+                            BackProp1 = TrainOneBatch(BackProp1, false, 0,0, backpropInc, TrainImage, TrainLabel);
+                        }
+                    }
+
+                    numCorrect = 0;
+                    for (int j = 0; j < 5; j++) {
+                        int[] labels = new int[label[j].length];
+                        for (int k = 0; k < label[j].length; k++) {
+                            labels[k] = arrayTOnumber(label[j][k]);
+                        }
+
+                        if (geneORprop){
+                            numCorrect += TestOneBatch(Genetic1[0], image[j], labels);
+                        } else{
+                            numCorrect += TestOneBatch(BackProp1[0], image[j], labels);
+                        }
+                    }
+
+                    final String output = "Iteration: " + (i + 1) + "\tPercentage: " + (numCorrect / 10) + "." + (numCorrect % 10);
+                    PerformanceReport[i + 1] = (numCorrect / 10) + "." + (numCorrect % 10);
+
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            mOutputText3.setText(output);
+                        }
+                    });
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
     private void getResultsFromApi() {
         if (! isGooglePlayServicesAvailable()) {
             acquireGooglePlayServices();
@@ -335,7 +461,14 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
             chooseAccount();
         } else if (! isDeviceOnline()) {
             mOutputText.setText("No network connection available.");
-        } else if (postORget){
+        }
+    }
+
+    private void PostGet(){
+
+        getResultsFromApi();
+
+        if (postORget){
             if (geneORprop){
                 new PostBrains(mCredential, Genetic1).execute();
             } else {
@@ -491,11 +624,11 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
             }
             String[] fileBatch = sb.toString().split("%");
 
-            double[][] images = new double[fileBatch.length][784];
-            double[][] labels = new double[fileBatch.length][10];
+            double[][] images = new double[fileBatch.length - 1][784];
+            double[][] labels = new double[fileBatch.length - 1][10];
 
-            for (int i = 0; i < fileBatch.length; i++) {
-                String[] values = fileBatch[i].split(",");
+            for (int i = 0; i < fileBatch.length - 1; i++) {
+                String[] values = fileBatch[i + 1].split(",");
                 if (values.length != 785) throw new RuntimeException("Incorrect batchfile");
 
                 labels[i] = numberTOarray(Integer.parseInt(values[0]), 10);
@@ -557,7 +690,7 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         return input;
     }
 
-    public double TestOneBatch(Brain input, double[][] testInputs, int[] testExpected){
+    public int TestOneBatch(Brain input, double[][] testInputs, int[] testExpected){
 
         if (testInputs.length != testExpected.length) throw new RuntimeException("Illegal matrix dimensions.");
         int batchSize = testInputs.length;
@@ -569,7 +702,7 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
             if (guess == testExpected[i]) numCorrect++;
         }
 
-        return ((double) numCorrect) / ((double) batchSize);
+        return numCorrect;
     }
 
     public int arrayTOnumber(double[] input){
@@ -588,7 +721,7 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
         if (number >= arraylength) throw new RuntimeException("Illegal convert arguments.");
 
         double[] result = new double[arraylength];
-        result[number] = 1d;
+        result[number] = 1.0;
         return result;
     }
 
@@ -747,7 +880,7 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
                 long testIndex = 0;
                 while ((line2 = bufferedReader2.readLine()) != null) {
                     batch2 += "%" + line2;
-                    if (++trainIndex % testBatchSize == 0) {
+                    if (++testIndex % testBatchSize == 0) {
                         FileOutputStream outputStream;
                         outputStream = openFileOutput(MnistTestFileName + (int)(testIndex / testBatchSize), MODE_PRIVATE);
                         outputStream.write(batch2.getBytes());
@@ -766,6 +899,64 @@ public class MainActivity extends AppCompatActivity implements EasyPermissions.P
                 succes = false;
             }
             return succes ? "MNIST download succesful" : "MNIST download failed";
+        }
+
+        @Override
+        protected void onPostExecute(String response) {
+            mProgress.hide();
+            mOutputText.setText(response);
+        }
+
+    }
+
+    private class PostResults extends AsyncTask<Void, Void, String>{
+
+        private com.google.api.services.sheets.v4.Sheets mService ;
+        String[] performanceData;
+
+        PostResults(GoogleAccountCredential credential, String[] performanceData){
+            HttpTransport transport = AndroidHttp.newCompatibleTransport();
+            JsonFactory jsonFactory = JacksonFactory.getDefaultInstance();
+            mService = new com.google.api.services.sheets.v4.Sheets.Builder(
+                    transport, jsonFactory, credential)
+                    .setApplicationName("Google Sheets API Android Quickstart")
+                    .build();
+
+            this.performanceData = performanceData;
+        }
+
+        @Override
+        protected void onPreExecute() {
+            mOutputText.setText("");
+            mProgress.show();
+        }
+
+        @Override
+        protected String doInBackground(Void...params) {
+
+            try {
+                String range = geneORprop ? ("Sheet1!B2:B" + (performanceData.length + 1)) : ("Sheet1!C2:C" + (performanceData.length + 1));
+
+                List<List<Object>> values = new ArrayList<>();
+
+                for (int j = 0; j < performanceData.length; j++) {
+                    List<Object> row = new ArrayList<>();
+                    row.add(performanceData[j]);
+                    values.add(row);
+                }
+
+                ValueRange body = new ValueRange()
+                        .setValues(values);
+                UpdateValuesResponse result =
+                        mService.spreadsheets().values().update(ResultSheetID, range, body)
+                                .setValueInputOption("USER_ENTERED")
+                                .execute();
+
+                return "Post Successful";
+            } catch (Exception e) {
+                e.printStackTrace();
+                return "Post Failed";
+            }
         }
 
         @Override
